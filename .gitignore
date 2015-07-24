@@ -1,0 +1,9 @@
+# Ignorar archivos construidos
+*.[oa]
+*.swp
+*~
+\#*#
+*.pyc
+README.pdf
+README.html
+pgcluster-*.tar.gz

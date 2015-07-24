@@ -1,0 +1,16 @@
+# sample config.cfg
+
+BASE_PORT=5432
+CLUSTER_NAME="pru"
+CLUSTER_ID=1
+NODE_ID=1
+
+# Globals
+DBA_EMAIL='dbas@example.com'
+BACKUP_EMAIL='dbas@example.com'
+BACKUP_USER="backups_user"
+BACKUP_SERVER="192.168.1.17"
+REMOTE_BACKUP_PATH="/backups/postgres/dumps"
+REMOTE_BACKUP_LOG_PATH="/backups/postgres/logs"
+BACKUP_CRON_LINE="#0 2 * * *"
+

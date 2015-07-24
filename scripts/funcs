@@ -1,0 +1,101 @@
+#!/bin/bash
+# -*- coding: utf-8 -*-
+# 
+# new-edbppas-node.sh
+# This file is part of pgdecacluster.
+# 
+# Copyright (C) 2013 - Víctor Daniel Martínez Olier
+# Copyright (C) 2013 - Summan S.A.S.
+# 
+# pgdecacluster is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# pgdecacluster is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+# 
+# You should have received a copy of the GNU General Public License
+# along with pgdecacluster.  If not, see <http://www.gnu.org/licenses/>.
+# 
+
+function getPgPoolConf() {
+  cat ~/data/conf/pgpool.conf |
+    grep "^$1[[:space:]]*=" |
+    awk -F"=" '{print $2}' |
+    sed "s/^[[:space:]]*[\"']*//g;s/[\"']*[[:space:]]*$//g"
+}
+
+function reloadPgPool() {
+  pgpool -f ~/data/conf/pgpool.conf \
+         -a ~/data/conf/pool_hba.conf \
+         -F ~/data/conf/pcp.conf \
+         reload
+}
+
+function getNodesInfo() {
+    PG_USERNAME=$1
+    PG_PASSWORD=$2
+    PG_HOSTNAME=$3
+    PG_PORT=$4
+
+    export PGPASSFILE=`mktemp -t tmp.\`whoami\`.XXXXXXXXXX`
+    chmod 'u=rw,g=,o=' "$PGPASSFILE"
+
+    echo \
+     "$PG_HOSTNAME:$PG_PORT:template1:$PG_USERNAME:$PG_PASSWORD" > \
+     "$PGPASSFILE"
+
+    echo -e 'SHOW pool_nodes;' |
+    psql -A \
+         -F "$FIELD_SEPARATOR" \
+         -t \
+         -w \
+         -U "$PG_USERNAME" \
+         -h "$PG_HOSTNAME" \
+         -p "$PG_PORT" \
+         template1
+    rm -f "$PGPASSFILE" > /dev/null 2>&1
+}
+
+function getPgpoolNodesInfo() {
+    getNodesInfo "$PGPOOL_USER" \
+                 "$PGPOOL_PASSWORD" \
+                 "$PGPOOL_SERVER" \
+                 "$BASE_PORT"
+}
+
+function getPgpoolNodesInfoPCP() {
+    PCP_NODE_INFO="/opt/PostgresPlus/9.xAS/bin/pcp_node_info"
+    PCP_NODE_COUNT="/opt/PostgresPlus/9.xAS/bin/pcp_node_count"
+    NODES_COUNT=`$PCP_NODE_COUNT 3 $PGPOOL_SERVER $PCP_PORT $PCP_USERNAME "$PCP_PASSWORD"`
+    let LAST_ID=NODES_COUNT-1
+
+    for i in `seq 0 1 $LAST_ID` ; do
+        echo -n "$i$FIELD_SEPARATOR"
+        AWK_CODE="{ print \$1\"$FIELD_SEPARATOR\"\$2\"$FIELD_SEPARATOR\"\$3\"$FIELD_SEPARATOR\"\$4 }"
+        $PCP_NODE_INFO 3 $PGPOOL_SERVER $PCP_PORT $PCP_USERNAME "$PCP_PASSWORD" $i | awk "$AWK_CODE"
+    done
+}
+
+function isolateNode() {
+    ISOLATED_NODE=$1
+    PG_CTL="/opt/PostgresPlus/9.xAS/bin/pg_ctl"
+    PCP_NODE_INFO="/opt/PostgresPlus/9.xAS/bin/pcp_node_info"
+    PCP_POOL_STATUS="/opt/PostgresPlus/9.xAS/bin/pcp_pool_status"
+    PCP_NODE_COUNT="/opt/PostgresPlus/9.xAS/bin/pcp_node_count"
+    NODES_COUNT=`$PCP_NODE_COUNT 3 $PGPOOL_SERVER $PCP_PORT $PCP_USERNAME "$PCP_PASSWORD"`
+    let LAST_ID=NODES_COUNT-1
+
+    for i in `seq 0 1 $LAST_ID` ; do
+        if [ $i -ne $ISOLATED_NODE ] ; then
+            HOST_NAME=`$PCP_NODE_INFO 3 $PGPOOL_SERVER $PCP_PORT $PCP_USERNAME "$PCP_PASSWORD" $i | awk '{print $1}'`
+            DATA_DIR=`$PCP_POOL_STATUS 3 $PGPOOL_SERVER $PCP_PORT $PCP_USERNAME "$PCP_PASSWORD" | grep -A 1 "backend_data_directory$i" | grep value: | awk '{ print $2 }'`
+            USER_NAME=pguser$CLUSTER_NAME$((i + 1))
+            ( ssh -oStrictHostKeyChecking=no -n -T -l $USER_NAME $HOST_NAME "$PG_CTL stop -w -m fast -D $DATA_DIR" ) &
+        fi
+    done
+}
+

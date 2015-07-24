@@ -1,0 +1,19 @@
+#!/bin/bash
+
+. ~/../globals.cfg
+. /pgcluster/scripts/funcs
+
+NODES_INFO=`getPgpoolNodesInfo`
+
+LOCAL_IP=`grep "^listen_addresses" $LOCAL_PGDATA/postgresql.conf | cut -d"'" -f2`
+LOCAL_PORT=`grep "^port" $LOCAL_PGDATA/postgresql.conf | cut -d "'" -f2`
+LOCAL_USERNAME=`id -n -u`
+LOCAL_NODE_ID=`echo "$LOCAL_PGDATA" | \
+               sed "s/\/pgcluster\/pg$CLUSTER_NAME\/pg\([0-9]\+\)\/data\/pgdata/\\1/g"`
+REMOTE_NODE_ID=`echo "$REMOTE_PGDATA" | \
+                sed "s/\/pgcluster\/pg$CLUSTER_NAME\/pg\([0-9]\+\)\/data\/pgdata/\\1/g"`
+REMOTE_USERNAME="pguser$CLUSTER_NAME$REMOTE_NODE_ID"
+REMOTE_PORT=`echo "$NODES_INFO" | \
+             grep "$FIELD_SEPARATOR$REMOTE_IP$FIELD_SEPARATOR" | \
+             awk -F"$FIELD_SEPARATOR" '{print $3}'`
+
