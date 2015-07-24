@@ -1,0 +1,25 @@
+#!/bin/bash -x
+#
+# Start PostgreSQL on the recovery target node
+#
+if [ $# -ne 2 ]
+then
+    echo "pgpool_remote_start remote_host remote_datadir"
+    exit 1
+fi
+
+. ~/../globals.cfg
+
+REMOTE_IP=$1
+REMOTE_PGDATA=$2
+PGCTL=/opt/PostgresPlus/9.xAS/bin/pg_ctl
+
+REMOTE_NODE_ID=`echo "$REMOTE_PGDATA" | \
+                sed "s/\/pgcluster\/pg$CLUSTER_NAME\/pg\([0-9]\+\)\/data\/pgdata/\\1/g"`
+REMOTE_USERNAME="pguser$CLUSTER_NAME$REMOTE_NODE_ID"
+
+ssh -oStrictHostKeyChecking=no -T -l $REMOTE_USERNAME $REMOTE_IP "rm -f $REMOTE_PGDATA/make_me_master"
+ssh -oStrictHostKeyChecking=no -T -l $REMOTE_USERNAME $REMOTE_IP "$PGCTL -w -D $REMOTE_PGDATA start > /dev/null 2>&1 < /dev/null &"
+
+sleep 3
+
